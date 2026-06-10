@@ -24,12 +24,14 @@ cargo run --
 * LR(0) / LR(1) DFA
 * LR(0) / SLR(1) / LR(1) 分析表
 * 多组样例的词法分析和语法分析结果
+* 以上内容现在按 Markdown 文档风格输出，便于重定向保存和跳转
 
 常用命令：
 
 ```bash
 cargo run -- grammar
 cargo run -- first-follow
+cargo run -- all-md [output-file]
 cargo run -- lr0-dfa
 cargo run -- lr1-dfa
 cargo run -- lr0-table
@@ -38,6 +40,14 @@ cargo run -- lr1-table
 cargo run -- tokens <source-file>
 cargo run -- parse-slr <source-file>
 cargo run -- parse-lr1 <source-file>
+```
+
+可以直接配合仓库里的样例文件运行：
+
+```bash
+cargo run -- parse-slr examples/valid.simple
+cargo run -- parse-lr1 examples/valid.simple
+cargo run -- parse-slr examples/invalid.simple
 ```
 
 ## 项目结构
@@ -71,3 +81,15 @@ cargo test
 
 * [docs/SPEC.md](docs/SPEC.md)：当前实现说明
 * [docs/TODO.md](docs/TODO.md)：当前已完成内容和后续可选工作
+
+如果希望直接生成 Markdown 文件，可以执行：
+
+```bash
+cargo run -- all-md
+```
+
+默认写入 `demo_output.md`，也可以手动指定输出路径：
+
+```bash
+cargo run -- all-md report.md
+```

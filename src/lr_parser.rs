@@ -365,12 +365,12 @@ pub fn parse_lr(
 #[cfg(test)]
 mod tests {
     use super::{ParseErrorKind, format_parse_steps, parse_lr};
-    use crate::{dfa_lr0::build_dfa_lr0, dfa_lr1::build_dfa_lr1};
     use crate::first_follow::get_first_set;
     use crate::grammar::Grammar;
     use crate::lexer::{Token, tokenize};
     use crate::lr_table::{Action, LRTable};
     use crate::symbol::{NonTerminal, Terminal};
+    use crate::{dfa_lr0::build_dfa_lr0, dfa_lr1::build_dfa_lr1};
 
     fn build_slr_table() -> LRTable {
         let grammar = Grammar::simple_lr();

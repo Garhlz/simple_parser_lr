@@ -36,13 +36,21 @@ pub fn closure_lr0(state: &StateLR0, grammar: &Grammar) -> StateLR0 {
 // GOTO 会先把所有可在该符号上前移的项目推进一格，再对结果重新取闭包。
 pub fn goto_lr0(state: &StateLR0, symbol: &Symbol, grammar: &Grammar) -> Option<StateLR0> {
     let mut result = StateLR0::new();
-    state.iter().filter(
-        // matches! 在这里直接把“圆点后是否正好等于目标符号”写成布尔条件。
-        |item| matches!(item.symbol_after_dot(grammar), Some(cur_symbol) if cur_symbol == symbol),
-    )
-    .map(|item| item.advance_dot(grammar))
-    .for_each(|item| {
-        if let Some(item) = item {result.insert(item);};});
+    state
+        .iter()
+        .filter(
+            // matches! 在这里直接把“圆点后是否正好等于目标符号”写成布尔条件。
+            |item| {
+                matches!(item.symbol_after_dot(grammar), 
+                    Some(cur_symbol) if cur_symbol == symbol)
+            },
+        )
+        .map(|item| item.advance_dot(grammar))
+        .for_each(|item| {
+            if let Some(item) = item {
+                result.insert(item);
+            };
+        });
 
     let closure = closure_lr0(&result, grammar);
     if closure.is_empty() {

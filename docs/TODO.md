@@ -20,6 +20,7 @@
 ```bash
 cargo run --
 cargo run -- all
+cargo run -- all-md [output-file]
 cargo run -- grammar
 cargo run -- first-follow
 cargo run -- lr0-dfa
@@ -35,7 +36,9 @@ cargo run -- tokens <source-file>
 说明：
 
 * `all` 使用内置样例演示完整流程，不再依赖 `examples/`
+* `all` / `all-md` 共用 Markdown 风格输出，便于做索引和跳转
 * `parse-slr` / `parse-lr1` 保留文件输入模式，便于手工测试自定义源码
+* 仓库保留了 `examples/valid.simple` / `examples/invalid.simple` 作为最小输入样例
 
 ## 后续可选工作
 

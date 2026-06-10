@@ -22,6 +22,7 @@ use crate::lr_parser::{format_parse_steps, parse_lr};
 use crate::lr_table::{LRTable, format_lr0_table};
 use std::env;
 use std::fs;
+use std::fmt::Write as _;
 use std::process;
 
 const VALID_SAMPLES: &[&str] = &[
@@ -57,6 +58,21 @@ fn run() -> Result<(), String> {
     // 命令行入口同时保留“全流程演示”和“按阶段单独查看”两种使用方式。
     match args.next().as_deref() {
         Some("all") | None => run_demo(),
+        Some("all-md") => {
+            let path = args
+                .next()
+                .unwrap_or_else(|| "demo_output.md".to_string());
+
+            if args.next().is_some() {
+                return Err("用法: cargo run -- all-md [output-file]".to_string());
+            }
+
+            let markdown = build_demo_markdown()?;
+            fs::write(&path, markdown)
+                .map_err(|err| format!("写入 Markdown 文件失败 `{path}`: {err}"))?;
+            println!("已生成 Markdown 演示文档: {path}");
+            Ok(())
+        }
         Some("grammar") => {
             print!("{}", Grammar::simple_lr());
             Ok(())
@@ -174,6 +190,11 @@ fn run() -> Result<(), String> {
 }
 
 fn run_demo() -> Result<(), String> {
+    print!("{}", build_demo_markdown()?);
+    Ok(())
+}
+
+fn build_demo_markdown() -> Result<String, String> {
     let grammar = Grammar::simple_lr();
     let dfa = build_dfa_lr0(&grammar);
     let lr0_table = LRTable::build_lr0(&grammar, &dfa)?;
@@ -181,95 +202,103 @@ fn run_demo() -> Result<(), String> {
     let first = get_first_set(&grammar);
     let dfa_lr1 = build_dfa_lr1(&grammar, &first);
     let lr1_table = LRTable::build_lr1(&grammar, &dfa_lr1)?;
+    let mut out = String::new();
 
-    // all 模式按实验展示顺序串起文法、集合、DFA、分析表和样例分析。
-    print_section("LR 文法");
-    println!("{}\n", grammar);
+    // `all` / `all-md` 共用一份 Markdown 渲染，便于直接保存成实验附件或索引文档。
+    writeln!(&mut out, "# Simple LR 演示输出\n").unwrap();
+    writeln!(&mut out, "## 目录").unwrap();
+    writeln!(&mut out, "- [LR 文法](#lr-文法)").unwrap();
+    writeln!(&mut out, "- [FIRST 集](#first-集)").unwrap();
+    writeln!(&mut out, "- [FOLLOW 集](#follow-集)").unwrap();
+    writeln!(&mut out, "- [冲突统计](#冲突统计)").unwrap();
+    writeln!(&mut out, "- [LR(0) DFA](#lr0-dfa)").unwrap();
+    writeln!(&mut out, "- [LR(0) 分析表](#lr0-分析表)").unwrap();
+    writeln!(&mut out, "- [SLR(1) 分析表](#slr1-分析表)").unwrap();
+    writeln!(&mut out, "- [LR(1) DFA](#lr1-dfa)").unwrap();
+    writeln!(&mut out, "- [LR(1) 分析表](#lr1-分析表)").unwrap();
+    writeln!(&mut out, "- [词法分析](#词法分析)").unwrap();
+    writeln!(&mut out, "- [SLR(1) 语法分析 - 合法样例](#slr1-语法分析---合法样例)").unwrap();
+    writeln!(&mut out, "- [SLR(1) 语法分析 - 非法样例](#slr1-语法分析---非法样例)\n").unwrap();
 
-    print_section("FIRST 集");
-    println!("{}\n", format_first_sets(&grammar));
+    write_markdown_section(&mut out, "LR 文法", &grammar.to_string());
+    write_markdown_section(&mut out, "FIRST 集", &format_first_sets(&grammar));
+    write_markdown_section(&mut out, "FOLLOW 集", &format_follow_sets(&grammar));
 
-    print_section("FOLLOW 集");
-    println!("{}\n", format_follow_sets(&grammar));
+    writeln!(&mut out, "## 冲突统计\n").unwrap();
+    writeln!(&mut out, "- `LR(0)` conflicts: {}", lr0_table.conflicts.len()).unwrap();
+    writeln!(&mut out, "- `SLR(1)` conflicts: {}", slr_table.conflicts.len()).unwrap();
+    writeln!(&mut out, "- `LR(1)` conflicts: {}\n", lr1_table.conflicts.len()).unwrap();
 
-    print_section("冲突统计");
-    println!("LR(0) conflicts: {}", lr0_table.conflicts.len());
-    println!("SLR(1) conflicts: {}\n", slr_table.conflicts.len());
-    println!("LR(1) conflicts: {}\n", lr1_table.conflicts.len());
+    write_markdown_section(&mut out, "LR(0) DFA", &format_dfa_lr0(&dfa, &grammar));
+    write_markdown_section(&mut out, "LR(0) 分析表", &format_lr0_table(&lr0_table, &grammar));
+    write_markdown_section(&mut out, "SLR(1) 分析表", &format_lr0_table(&slr_table, &grammar));
+    write_markdown_section(&mut out, "LR(1) DFA", &format_dfa_lr1(&dfa_lr1, &grammar));
+    write_markdown_section(&mut out, "LR(1) 分析表", &format_lr0_table(&lr1_table, &grammar));
 
-    print_section("LR(0) DFA");
-    println!("{}\n", format_dfa_lr0(&dfa, &grammar));
-
-    print_section("LR(0) 分析表");
-    println!("{}\n", format_lr0_table(&lr0_table, &grammar));
-
-    print_section("SLR(1) 分析表");
-    println!("{}\n", format_lr0_table(&slr_table, &grammar));
-
-    print_section("LR(1) DFA");
-    println!("{}\n", format_dfa_lr1(&dfa_lr1, &grammar));
-
-    print_section("LR(1) 分析表");
-    println!("{}\n", format_lr0_table(&lr1_table, &grammar));
-
-    print_section("词法分析");
+    writeln!(&mut out, "## 词法分析\n").unwrap();
     for (index, input) in VALID_SAMPLES.iter().enumerate() {
-        print_subsection(index + 1, input);
+        writeln!(&mut out, "### 样例 {}\n", index + 1).unwrap();
+        write_markdown_block(&mut out, "simple", input);
         match tokenize(input) {
-            Ok(tokens) => println!("Token: {}\n", format_tokens_verbose(&tokens)),
-            Err(err) => println!("词法错误: {err}\n"),
+            Ok(tokens) => write_markdown_block(&mut out, "text", &format_tokens_verbose(&tokens)),
+            Err(err) => writeln!(&mut out, "- 词法错误: {err}\n").unwrap(),
         }
     }
 
-    print_section("SLR(1) 语法分析 - 合法样例");
+    writeln!(&mut out, "## SLR(1) 语法分析 - 合法样例\n").unwrap();
     for (index, input) in VALID_SAMPLES.iter().enumerate() {
-        print_subsection(index + 1, input);
+        writeln!(&mut out, "### 样例 {}\n", index + 1).unwrap();
+        write_markdown_block(&mut out, "simple", input);
         match tokenize(input) {
             Ok(tokens) => match parse_lr(&grammar, &slr_table, &tokens) {
                 Ok(output) => {
-                    println!("分析结果: 接受");
+                    writeln!(&mut out, "- 分析结果: 接受\n").unwrap();
                     if index == 0 {
-                        println!("分析步骤:\n{}", format_parse_steps(&output.steps));
+                        write_markdown_section(&mut out, "分析步骤", &format_parse_steps(&output.steps));
                     }
-                    println!("语法树:\n{}", output.tree);
+                    write_markdown_section(&mut out, "语法树", &output.tree.to_string());
                 }
                 Err(err) => {
-                    println!("分析结果: 错误");
-                    println!("{}\n", format_parse_error(&err.to_string()));
+                    writeln!(&mut out, "- 分析结果: 错误\n").unwrap();
+                    writeln!(&mut out, "- {}\n", format_parse_error(&err.to_string())).unwrap();
                 }
             },
-            Err(err) => println!("词法错误: {err}\n"),
+            Err(err) => writeln!(&mut out, "- 词法错误: {err}\n").unwrap(),
         }
     }
 
-    print_section("SLR(1) 语法分析 - 非法样例");
+    writeln!(&mut out, "## SLR(1) 语法分析 - 非法样例\n").unwrap();
     for (index, input) in INVALID_SAMPLES.iter().enumerate() {
-        print_subsection(index + 1, input);
+        writeln!(&mut out, "### 样例 {}\n", index + 1).unwrap();
+        write_markdown_block(&mut out, "simple", input);
         match tokenize(input) {
             Ok(tokens) => match parse_lr(&grammar, &slr_table, &tokens) {
                 Ok(output) => {
-                    println!("分析结果: 意外接受");
-                    println!("分析步骤:\n{}", format_parse_steps(&output.steps));
-                    println!("语法树:\n{}", output.tree);
+                    writeln!(&mut out, "- 分析结果: 意外接受\n").unwrap();
+                    write_markdown_section(&mut out, "分析步骤", &format_parse_steps(&output.steps));
+                    write_markdown_section(&mut out, "语法树", &output.tree.to_string());
                 }
                 Err(err) => {
-                    println!("分析结果: 错误");
-                    println!("{}\n", format_parse_error(&err.to_string()));
+                    writeln!(&mut out, "- 分析结果: 错误\n").unwrap();
+                    writeln!(&mut out, "- {}\n", format_parse_error(&err.to_string())).unwrap();
                 }
             },
-            Err(err) => println!("词法错误: {err}\n"),
+            Err(err) => writeln!(&mut out, "- 词法错误: {err}\n").unwrap(),
         }
     }
 
-    Ok(())
+    Ok(out)
 }
 
-fn print_section(title: &str) {
-    println!("\n=== {title} ===\n");
+fn write_markdown_section(out: &mut String, title: &str, body: &str) {
+    writeln!(out, "## {title}\n").unwrap();
+    write_markdown_block(out, "text", body);
 }
 
-fn print_subsection(index: usize, input: &str) {
-    println!("[样例 {index}] {input}");
+fn write_markdown_block(out: &mut String, language: &str, body: &str) {
+    writeln!(out, "```{language}").unwrap();
+    writeln!(out, "{body}").unwrap();
+    writeln!(out, "```\n").unwrap();
 }
 
 fn print_usage() {
@@ -294,6 +323,7 @@ Simple LR 实验入口
 用法:
   cargo run --
   cargo run -- all
+  cargo run -- all-md [output-file]
   cargo run -- grammar
   cargo run -- first-follow
   cargo run -- lr0-dfa

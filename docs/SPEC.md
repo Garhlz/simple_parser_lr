@@ -52,6 +52,7 @@ src/
 ```bash
 cargo run --
 cargo run -- all
+cargo run -- all-md [output-file]
 cargo run -- grammar
 cargo run -- first-follow
 cargo run -- lr0-dfa
@@ -67,7 +68,10 @@ cargo run -- tokens <source-file>
 说明：
 
 * `all` 使用内置样例，输出完整文法、DFA、分析表和分析结果
+* `all` 当前按 Markdown 风格输出，适合直接重定向保存
+* `all-md` 会直接把同样内容写入 Markdown 文件，默认文件名为 `demo_output.md`
 * `parse-slr` / `parse-lr1` 保留文件输入，便于单独测试自定义源码
+* 仓库同时提供了 `examples/valid.simple` 和 `examples/invalid.simple` 作为最小文件输入样例
 * 默认 `cargo run --` 等价于 `cargo run -- all`
 
 ## 输出约定
