@@ -1,4 +1,6 @@
+mod dfa;
 mod dfa_lr0;
+mod item_set;
 mod first_follow;
 mod grammar;
 mod item_lr0;
@@ -7,9 +9,13 @@ mod lr_parser;
 mod lr_table;
 mod symbol;
 mod syntax_tree;
+mod item_lr1;
+mod dfa_lr1;
 
 use crate::dfa_lr0::{build_dfa_lr0, format_dfa_lr0};
+use crate::dfa_lr1::{build_dfa_lr1, format_dfa_lr1};
 use crate::first_follow::{format_first_sets, format_follow_sets};
+use crate::first_follow::get_first_set;
 use crate::grammar::Grammar;
 use crate::lexer::{format_tokens_verbose, tokenize};
 use crate::lr_parser::{format_parse_steps, parse_lr};
@@ -68,6 +74,13 @@ fn run() -> Result<(), String> {
             println!("{}", format_dfa_lr0(&dfa, &grammar));
             Ok(())
         }
+        Some("lr1-dfa") => {
+            let grammar = Grammar::simple_lr();
+            let first = get_first_set(&grammar);
+            let dfa = build_dfa_lr1(&grammar, &first);
+            println!("{}", format_dfa_lr1(&dfa, &grammar));
+            Ok(())
+        }
         Some("lr0-table") => {
             let grammar = Grammar::simple_lr();
             let dfa = build_dfa_lr0(&grammar);
@@ -79,6 +92,14 @@ fn run() -> Result<(), String> {
             let grammar = Grammar::simple_lr();
             let dfa = build_dfa_lr0(&grammar);
             let table = LRTable::build_slr1(&grammar, &dfa)?;
+            println!("{}", format_lr0_table(&table, &grammar));
+            Ok(())
+        }
+        Some("lr1-table") => {
+            let grammar = Grammar::simple_lr();
+            let first = get_first_set(&grammar);
+            let dfa = build_dfa_lr1(&grammar, &first);
+            let table = LRTable::build_lr1(&grammar, &dfa)?;
             println!("{}", format_lr0_table(&table, &grammar));
             Ok(())
         }
@@ -97,6 +118,30 @@ fn run() -> Result<(), String> {
             let grammar = Grammar::simple_lr();
             let dfa = build_dfa_lr0(&grammar);
             let table = LRTable::build_slr1(&grammar, &dfa)?;
+            let output = parse_lr(&grammar, &table, &tokens)
+                .map_err(|err| format_parse_error(&err.to_string()))?;
+            println!("{}", format_parse_steps(&output.steps));
+            println!();
+            println!("syntax tree:");
+            println!("{}", output.tree);
+            Ok(())
+        }
+        Some("parse-lr1") => {
+            let path = args
+                .next()
+                .ok_or_else(|| "用法: cargo run -- parse-lr1 <source-file>".to_string())?;
+
+            if args.next().is_some() {
+                return Err("用法: cargo run -- parse-lr1 <source-file>".to_string());
+            }
+
+            let source = fs::read_to_string(&path)
+                .map_err(|err| format!("读取源文件失败 `{path}`: {err}"))?;
+            let tokens = tokenize(&source)?;
+            let grammar = Grammar::simple_lr();
+            let first = get_first_set(&grammar);
+            let dfa = build_dfa_lr1(&grammar, &first);
+            let table = LRTable::build_lr1(&grammar, &dfa)?;
             let output = parse_lr(&grammar, &table, &tokens)
                 .map_err(|err| format_parse_error(&err.to_string()))?;
             println!("{}", format_parse_steps(&output.steps));
@@ -133,6 +178,9 @@ fn run_demo() -> Result<(), String> {
     let dfa = build_dfa_lr0(&grammar);
     let lr0_table = LRTable::build_lr0(&grammar, &dfa)?;
     let slr_table = LRTable::build_slr1(&grammar, &dfa)?;
+    let first = get_first_set(&grammar);
+    let dfa_lr1 = build_dfa_lr1(&grammar, &first);
+    let lr1_table = LRTable::build_lr1(&grammar, &dfa_lr1)?;
 
     // all 模式按实验展示顺序串起文法、集合、DFA、分析表和样例分析。
     print_section("LR 文法");
@@ -147,6 +195,7 @@ fn run_demo() -> Result<(), String> {
     print_section("冲突统计");
     println!("LR(0) conflicts: {}", lr0_table.conflicts.len());
     println!("SLR(1) conflicts: {}\n", slr_table.conflicts.len());
+    println!("LR(1) conflicts: {}\n", lr1_table.conflicts.len());
 
     print_section("LR(0) DFA");
     println!("{}\n", format_dfa_lr0(&dfa, &grammar));
@@ -156,6 +205,12 @@ fn run_demo() -> Result<(), String> {
 
     print_section("SLR(1) 分析表");
     println!("{}\n", format_lr0_table(&slr_table, &grammar));
+
+    print_section("LR(1) DFA");
+    println!("{}\n", format_dfa_lr1(&dfa_lr1, &grammar));
+
+    print_section("LR(1) 分析表");
+    println!("{}\n", format_lr0_table(&lr1_table, &grammar));
 
     print_section("词法分析");
     for (index, input) in VALID_SAMPLES.iter().enumerate() {
@@ -242,9 +297,12 @@ Simple LR 实验入口
   cargo run -- grammar
   cargo run -- first-follow
   cargo run -- lr0-dfa
+  cargo run -- lr1-dfa
   cargo run -- lr0-table
   cargo run -- slr-table
+  cargo run -- lr1-table
   cargo run -- parse-slr <source-file>
+  cargo run -- parse-lr1 <source-file>
   cargo run -- tokens <source-file>
   cargo run -- help
 "

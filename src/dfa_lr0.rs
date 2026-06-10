@@ -1,24 +1,27 @@
+use crate::dfa::Dfa;
 use crate::grammar::Grammar;
-use crate::item_lr0::{Item, State};
+use crate::item_lr0::{ItemLR0, StateLR0};
 use crate::symbol::Symbol;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-// 只要闭包中还存在圆点后是非终结符的项目，就继续把该非终结符的初始项目补进来。
-pub fn closure_lr0(state: &State, grammar: &Grammar) -> State {
+/// 输入state，输出其闭包state
+/// 只要闭包中还存在圆点后是非终结符的项目，就继续把该非终结符的初始项目补进来。
+pub fn closure_lr0(state: &StateLR0, grammar: &Grammar) -> StateLR0 {
     let mut closure = state.clone();
     loop {
         let mut changed = false;
-        let tmp_vec = closure.iter().cloned().collect::<Vec<Item>>();
+        let tmp_vec = closure.iter().cloned().collect::<Vec<ItemLR0>>();
         for item in &tmp_vec {
             if let Some(symbol) = item.symbol_after_dot(grammar)
                 && let Symbol::NonTerminal(nt) = symbol
             {
                 grammar
                     .productions_for(*nt)
-                    .map(|(prod_id, _)| Item::new(prod_id, 0))
+                    .map(|(prod_id, _)| ItemLR0::new(prod_id, 0))
                     .for_each(|item| {
                         changed |= closure.insert(item);
+                        // 构建以当前非终结符为lhs，dot = 0的item，尝试插入closure
                         // 只要有一个成功插入，就算是修改了
                     });
             }
@@ -31,9 +34,10 @@ pub fn closure_lr0(state: &State, grammar: &Grammar) -> State {
 }
 
 // GOTO 会先把所有可在该符号上前移的项目推进一格，再对结果重新取闭包。
-pub fn goto_lr0(state: &State, symbol: &Symbol, grammar: &Grammar) -> Option<State> {
-    let mut result = State::new();
+pub fn goto_lr0(state: &StateLR0, symbol: &Symbol, grammar: &Grammar) -> Option<StateLR0> {
+    let mut result = StateLR0::new();
     state.iter().filter(
+        // matches! 在这里直接把“圆点后是否正好等于目标符号”写成布尔条件。
         |item| matches!(item.symbol_after_dot(grammar), Some(cur_symbol) if cur_symbol == symbol),
     )
     .map(|item| item.advance_dot(grammar))
@@ -49,24 +53,22 @@ pub fn goto_lr0(state: &State, symbol: &Symbol, grammar: &Grammar) -> Option<Sta
 }
 
 // 获取当前state的所有的item的dot之后的symbol的去重集合
-fn next_symbols<'a>(state: &State, grammar: &'a Grammar) -> BTreeSet<Symbol> {
+fn next_symbols<'a>(state: &StateLR0, grammar: &'a Grammar) -> BTreeSet<Symbol> {
     state
         .iter()
         .map(|item| item.symbol_after_dot(grammar))
+        // symbol_after_dot 返回 Option<&Symbol>；flatten() 会自动跳过 None，并解开 Some。
         .flatten()
         .cloned()
         .collect::<BTreeSet<Symbol>>()
 }
 
-pub struct DfaLR0 {
-    pub states: Vec<State>,
-    pub transitions: BTreeMap<(usize, Symbol), usize>,
-}
+pub type DfaLR0 = Dfa<StateLR0>;
 
 // 从初始项目集出发，按“圆点后可转移符号集合”逐步扩展完整的 LR(0) 项目集自动机。
 pub fn build_dfa_lr0(grammar: &Grammar) -> DfaLR0 {
-    let mut start = State::new();
-    start.insert(Item::new(0, 0));
+    let mut start = StateLR0::new();
+    start.insert(ItemLR0::new(0, 0));
     let start_closure = closure_lr0(&start, grammar);
 
     let mut states = Vec::new();

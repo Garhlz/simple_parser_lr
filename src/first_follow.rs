@@ -146,7 +146,11 @@ pub fn format_first_sets(grammar: &Grammar) -> String {
     let mut lines = Vec::new();
     for &non_terminal in NonTerminal::all() {
         if let Some(set) = first.get(&non_terminal) {
-            lines.push(format!("FIRST({}) = {}", non_terminal, format_symbol_set(set)));
+            lines.push(format!(
+                "FIRST({}) = {}",
+                non_terminal,
+                format_symbol_set(set)
+            ));
         }
     }
     lines.join("\n")

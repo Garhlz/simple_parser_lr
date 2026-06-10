@@ -67,6 +67,7 @@ impl fmt::Display for ParseError {
             .action
             .as_ref()
             .map(ToString::to_string)
+            // 没有动作时用 none 占位，保持所有错误输出的文本结构一致。
             .unwrap_or_else(|| "none".to_string());
         let error_kind = match self.kind {
             ParseErrorKind::Syntax => "syntax error",
@@ -166,6 +167,7 @@ pub fn parse_lr(
         let fallback_token = tokens
             .last()
             .cloned()
+            // 这里兜底构造一个 #，保证后续错误路径始终有一个可打印的 token。
             .unwrap_or_else(|| synthetic_end_token(0));
         let Some(token) = tokens.get(index) else {
             return Err(parse_error(
@@ -257,6 +259,7 @@ pub fn parse_lr(
                 }
 
                 if prod.rhs != popped_symbols.into_iter().rev().collect::<Vec<_>>() {
+                    // reduce 弹栈是从右往左弹出的，这里 reverse 后才能和产生式右部做顺序一致的比较。
                     return Err(parse_error(
                         ParseErrorKind::Internal,
                         state_id,
@@ -270,6 +273,7 @@ pub fn parse_lr(
                     let epsilon_id = tree.add_epsilon();
                     tree.add_non_terminal(prod.lhs, vec![epsilon_id])
                 } else {
+                    // 语法树孩子节点同样需要 reverse，才能恢复成文法右部原本的从左到右顺序。
                     tree.add_non_terminal(prod.lhs, popped_nodes.into_iter().rev().collect())
                 };
 
@@ -361,7 +365,8 @@ pub fn parse_lr(
 #[cfg(test)]
 mod tests {
     use super::{ParseErrorKind, format_parse_steps, parse_lr};
-    use crate::dfa_lr0::build_dfa_lr0;
+    use crate::{dfa_lr0::build_dfa_lr0, dfa_lr1::build_dfa_lr1};
+    use crate::first_follow::get_first_set;
     use crate::grammar::Grammar;
     use crate::lexer::{Token, tokenize};
     use crate::lr_table::{Action, LRTable};
@@ -378,6 +383,13 @@ mod tests {
         let table = build_slr_table();
         let tokens = tokenize(input).expect("tokenize should succeed");
         parse_lr(&grammar, &table, &tokens).expect("parse should succeed")
+    }
+
+    fn build_lr1_table() -> LRTable {
+        let grammar = Grammar::simple_lr();
+        let first = get_first_set(&grammar);
+        let dfa = build_dfa_lr1(&grammar, &first);
+        LRTable::build_lr1(&grammar, &dfa).expect("lr1 table should build")
     }
 
     fn parse_ok_tree(input: &str) -> String {
@@ -480,6 +492,21 @@ mod tests {
         assert!(tree_text.contains("DeclStmt"));
         assert!(tree_text.contains("WhileStmt"));
         assert!(tree_text.contains("StmtList"));
+    }
+
+    #[test]
+    fn parses_valid_input_with_lr1_table() {
+        let grammar = Grammar::simple_lr();
+        let table = build_lr1_table();
+        let tokens = tokenize("let x = 1;").expect("tokenize should succeed");
+
+        let output = parse_lr(&grammar, &table, &tokens).expect("parse should succeed");
+
+        assert!(matches!(
+            output.steps.last().map(|step| &step.action),
+            Some(Action::Accept)
+        ));
+        assert!(output.tree.to_string().contains("DeclStmt"));
     }
 
     #[test]

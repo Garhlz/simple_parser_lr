@@ -1,16 +1,23 @@
-use std::fmt;
-
-use crate::{grammar::Grammar, item_set::ItemSet, symbol::Symbol};
+use crate::{
+    grammar::Grammar,
+    item_set::ItemSet,
+    symbol::{Symbol, Terminal},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ItemLR0 {
+pub struct ItemLR1 {
     pub production_id: usize,
     pub dot: usize,
+    pub lookahead: Terminal,
 }
 
-impl ItemLR0 {
-    pub fn new(production_id: usize, dot: usize) -> Self {
-        Self { production_id, dot }
+impl ItemLR1 {
+    pub fn new(production_id: usize, dot: usize, lookahead: Terminal) -> Self {
+        Self {
+            production_id,
+            dot,
+            lookahead,
+        }
     }
 
     pub fn symbol_after_dot<'a>(&self, grammar: &'a Grammar) -> Option<&'a Symbol> {
@@ -31,6 +38,7 @@ impl ItemLR0 {
         Some(Self {
             production_id: self.production_id,
             dot: self.dot + 1,
+            lookahead: self.lookahead,
         })
     }
 
@@ -56,26 +64,21 @@ impl ItemLR0 {
                 }
 
                 format!(
-                    "({}) {} -> {}",
+                    "({}) {} -> {}, {}",
                     self.production_id,
                     production.lhs,
-                    parts.join(" ")
+                    parts.join(" "),
+                    self.lookahead
                 )
             }
-            None => format!("#{} @ {}", self.production_id, self.dot),
+            None => format!("#{} @ {}, {}", self.production_id, self.dot, self.lookahead),
         }
     }
 }
 
-impl fmt::Display for ItemLR0 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "#{} @ {}", self.production_id, self.dot)
-    }
-}
+pub type StateLR1 = ItemSet<ItemLR1>;
 
-pub type StateLR0 = ItemSet<ItemLR0>;
-
-impl StateLR0 {
+impl StateLR1 {
     pub fn format_with_grammar(&self, grammar: &Grammar) -> String {
         let mut lines = Vec::new();
         lines.push("{".to_string());
@@ -84,15 +87,5 @@ impl StateLR0 {
         }
         lines.push("}".to_string());
         lines.join("\n")
-    }
-}
-
-impl fmt::Display for StateLR0 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{{")?;
-        for item in self.iter() {
-            writeln!(f, "  {item}")?;
-        }
-        write!(f, "}}")
     }
 }
